@@ -263,3 +263,60 @@ if not deck_df.empty:
         st.rerun()
 else:
     st.info("上の検索バーからカードを追加してください。")
+
+st.divider()
+
+# ==========================================
+# 7. デッキの保存・読み込みエリア
+# ==========================================
+st.header("💾 デッキの保存・読み込み")
+
+# 画面を左右に分割（スマホでは自動的に縦並びになります）
+col_import, col_export = st.columns(2)
+
+with col_export:
+    st.subheader("📤 保存 (ダウンロード)")
+    if not deck_df.empty:
+        # 現在のデッキをテキスト化
+        save_text = "\n".join([f"{row['count']} {row['name']}" for _, row in deck_df.iterrows()])
+        
+        # Streamlit標準のダウンロードボタン
+        st.download_button(
+            label="テキストファイルとして保存",
+            data=save_text,
+            file_name="my_deck.txt",
+            mime="text/plain",
+            type="primary",
+            use_container_width=True
+        )
+        st.info("作成したデッキをスマホやPCに保存できます。")
+    else:
+        st.info("デッキが空です。")
+
+with col_import:
+    st.subheader("📥 読み込み (復元)")
+    import_text = st.text_area("保存したテキストを貼り付け", height=150, placeholder="例:\n4 Dark Matter Manipulator\n22 Swamp")
+    
+    if st.button("テキストからデッキを復元", use_container_width=True):
+        if import_text.strip():
+            new_deck = []
+            # 改行で分割して1行ずつ処理
+            lines = import_text.split('\n')
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                # 最初の半角スペースで分割（枚数とカード名に分ける）
+                parts = line.split(" ", 1)
+                if len(parts) == 2 and parts[0].isdigit():
+                    count = int(parts[0])
+                    name = parts[1].strip()
+                    new_deck.append({"name": name, "count": count})
+            
+            if new_deck:
+                st.session_state.deck = new_deck
+                st.success("デッキを読み込みました！")
+                st.rerun()
+            else:
+                st.error("読み込めるカードが見つかりませんでした。形式を確認してください。")
