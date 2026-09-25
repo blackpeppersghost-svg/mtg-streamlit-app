@@ -38,7 +38,6 @@ FILE_IDS = {
 
 # ==========================================
 # 2. データの読み込み関数
-# 引数にフォーマット名を受け取るように変更
 # ==========================================
 @st.cache_data
 def load_data(format_name):
@@ -46,22 +45,25 @@ def load_data(format_name):
     dfs = []
     
     for key, file_id in file_ids.items():
-        # IDが未入力のものはスキップする処理（エラー回避用）
         if "のファイルID" in file_id:
             continue
             
         download_url = f"https://drive.google.com/uc?export=download&id={file_id}"
         try:
-            df = pd.read_csv(download_url)
-            dfs.append(df)
+            df_temp = pd.read_csv(download_url)
+            dfs.append(df_temp)
         except Exception as e:
             st.error(f"{key} のファイル読み込みに失敗しました。IDを確認してください。")
             
     if dfs:
-        return pd.concat(dfs, ignore_index=True)
+        combined_df = pd.concat(dfs, ignore_index=True)
+        
+        # ★最強の解決策：ここで全列名を強制的に小文字に統一します
+        combined_df.columns = combined_df.columns.str.lower()
+        
+        return combined_df
     else:
-        # 読み込めるデータがない場合は空のデータフレームを返す
-        return pd.DataFrame(columns=["Name", "Type"]) 
+        return pd.DataFrame(columns=["name", "type"]) 
 
 # ==========================================
 # 3. アプリケーションの状態管理
@@ -99,18 +101,21 @@ else:
     search_query = st.text_input("カード名を入力")
 
     if search_query:
-        # Name -> name に変更
+        # 列名が小文字に統一されたので、常に "name" で安全に検索できます
         results = df[df["name"].str.contains(search_query, case=False, na=False)]
+        
         if not results.empty:
             selected_card = st.selectbox("検索結果", results["name"].tolist())
             
             selected_row = results[results["name"] == selected_card].iloc[0]
             is_basic_land = False
             
-            # Type -> type_line に変更。文字列判定を小文字に統一。
-            type_val = str(selected_row.get("type_line", "")).lower()
-            if "basic" in type_val and "land" in type_val:
-                is_basic_land = True
+            # Type列の名前揺れ（type または type_line）にも完璧に対応
+            type_col_name = "type_line" if "type_line" in df.columns else "type"
+            if type_col_name in df.columns:
+                type_val = str(selected_row[type_col_name]).lower()
+                if "basic" in type_val and "land" in type_val:
+                    is_basic_land = True
                 
             max_copies = 99 if is_basic_land else 4
             
