@@ -59,32 +59,41 @@ def load_data(format_name):
         return pd.DataFrame(columns=["name", "type"]) 
 
 # ==========================================
-# 3. アプリケーションの状態管理
+# 3. アプリケーションの状態管理（ここで初期化）
 # ==========================================
 if "deck" not in st.session_state:
     st.session_state.deck = []
 
-# 初回起動時のセレクトボックスの初期値
-if "format_selector" not in st.session_state:
-    st.session_state.format_selector = "Standard"
-
-# ★ここが重要：下部のインポート処理から「変更予約」を受け取った場合
-# セレクトボックスが画面に描画される"前"に、内部状態を直接上書きしてしまう
-if st.session_state.get("pending_format"):
-    st.session_state.format_selector = st.session_state.pending_format
+if "pending_format" not in st.session_state:
     st.session_state.pending_format = None
-    st.session_state.skip_clear = True # 自動切り替え時はリセットを防止
 
-def clear_deck_on_format_change():
-    # ★追加: フォーマット変更時に検索窓を空にする
+if "current_format" not in st.session_state:
+    st.session_state.current_format = "Standard"
+
+# ★追加: 検索窓クリアの予約フラグ
+if "pending_clear_search" not in st.session_state:
+    st.session_state.pending_clear_search = False
+
+if st.session_state.pending_format:
+    st.session_state.current_format = st.session_state.pending_format
+    st.session_state.pending_format = None
+
+# ★追加: 画面（ウィジェット）が描画される"前"なら、エラーにならずに空にできる！
+if st.session_state.pending_clear_search:
     if "search_query" in st.session_state:
         st.session_state.search_query = ""
-        
+    st.session_state.pending_clear_search = False
+
+def clear_deck_on_format_change():
+    # ★直接空にするのではなく、予約フラグを立てる
+    st.session_state.pending_clear_search = True
+    
     if st.session_state.get("skip_clear"):
         st.session_state.skip_clear = False
         return
         
     st.session_state.deck = []
+    st.session_state.current_format = st.session_state.format_selector
     st.toast("フォーマットが変更されたため、デッキをリセットしました。", icon="🔄")
 
 st.title("MTG Deckbuilder")
@@ -235,9 +244,8 @@ if not deck_df.empty:
     
     if st.button("🗑️ デッキをすべてリセット", use_container_width=True):
         st.session_state.deck = []
-        # ★追加: リセット時にも検索窓を空にする
-        if "search_query" in st.session_state:
-            st.session_state.search_query = ""
+        # ★エラーの原因だった直接書き換えをやめ、予約フラグを立てる
+        st.session_state.pending_clear_search = True
         st.rerun()
 else:
     st.info("上の検索バーからカードを追加してください。")
@@ -314,10 +322,8 @@ with col_import:
                 st.session_state.deck = new_deck
                 st.success(f"デッキを読み込みました！ (自動判定: {detected_format or '不明'})")
                 
-                # ★追加: インポート完了時に検索窓を空にする
-                if "search_query" in st.session_state:
-                    st.session_state.search_query = ""
-                    
+                # ★エラーの原因だった直接書き換えをやめ、予約フラグを立てる
+                st.session_state.pending_clear_search = True
                 st.rerun()
             else:
                 st.error("読み込めるカードが見つかりませんでした。")
