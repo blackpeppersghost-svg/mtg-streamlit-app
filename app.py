@@ -59,27 +59,29 @@ def load_data(format_name):
         return pd.DataFrame(columns=["name", "type"]) 
 
 # ==========================================
-# 3. アプリケーションの状態管理（ここで初期化）
+# 3. アプリケーションの状態管理
 # ==========================================
 if "deck" not in st.session_state:
     st.session_state.deck = []
 
-# ★自動判定したフォーマットを一時保存する変数
-if "pending_format" not in st.session_state:
-    st.session_state.pending_format = None
+# 初回起動時のセレクトボックスの初期値
+if "format_selector" not in st.session_state:
+    st.session_state.format_selector = "Standard"
 
-# ★セレクトボックスの初期値を管理する変数
-if "current_format" not in st.session_state:
-    st.session_state.current_format = "Standard"
-
-# 自動切り替え要求があれば、描画前に書き換える
-if st.session_state.pending_format:
-    st.session_state.current_format = st.session_state.pending_format
+# ★ここが重要：下部のインポート処理から「変更予約」を受け取った場合
+# セレクトボックスが画面に描画される"前"に、内部状態を直接上書きしてしまう
+if st.session_state.get("pending_format"):
+    st.session_state.format_selector = st.session_state.pending_format
     st.session_state.pending_format = None
+    st.session_state.skip_clear = True # 自動切り替え時はリセットを防止
 
 def clear_deck_on_format_change():
+    # プログラムからの自動切り替え時はデッキを消さない
+    if st.session_state.get("skip_clear"):
+        st.session_state.skip_clear = False
+        return
+        
     st.session_state.deck = []
-    st.session_state.current_format = st.session_state.format_selector # ユーザー選択を反映
     st.toast("フォーマットが変更されたため、デッキをリセットしました。", icon="🔄")
 
 st.title("MTG Deckbuilder")
@@ -87,18 +89,15 @@ st.title("MTG Deckbuilder")
 # ==========================================
 # 4. フォーマット選択UI
 # ==========================================
-format_options = ["Standard", "Pioneer", "Modern"]
-# indexを使って初期値を指定する安全な方法
-default_index = format_options.index(st.session_state.current_format)
-
+# 変な index 指定は外し、key="format_selector" に完全にゆだねる
 selected_format = st.selectbox(
     "フォーマットを選択",
-    format_options,
-    index=default_index,
+    ["Standard", "Pioneer", "Modern"],
     key="format_selector",
     on_change=clear_deck_on_format_change
 )
 
+# 選択されたフォーマットのデータを読み込む
 df = load_data(selected_format)
 
 # ==========================================
@@ -301,13 +300,15 @@ with col_import:
                                 detected_format = check_fmt
                                 break
                                 
-                if detected_format and detected_format != st.session_state.current_format:
-                    # ★ここで直接書き換えず、「次回の再描画で切り替えてね」とフラグだけ立てる
+                # フォーマットの自動切り替え（現在と違う場合のみ）
+                if detected_format and detected_format != st.session_state.format_selector:
+                    # 次の再描画時の先頭（3番の場所）で強制書き換えさせるための予約フラグ
                     st.session_state.pending_format = detected_format
                     
                 st.session_state.deck = new_deck
                 st.success(f"デッキを読み込みました！ (自動判定: {detected_format or '不明'})")
-                # 強制的に画面を一番上から描き直させる（ここでエラーを回避）
+                
+                # 強制的に画面を一番上から描き直させる
                 st.rerun()
             else:
                 st.error("読み込めるカードが見つかりませんでした。")
