@@ -69,7 +69,16 @@ def load_data(format_name):
 if "deck" not in st.session_state:
     st.session_state.deck = []
 
+# フォーマット自動切り替え時のリセットを防止するフラグ
+if "skip_clear" not in st.session_state:
+    st.session_state.skip_clear = False
+
 def clear_deck_on_format_change():
+    # インポート機能によって自動で切り替わった場合はリセットを回避
+    if st.session_state.skip_clear:
+        st.session_state.skip_clear = False
+        return
+        
     st.session_state.deck = []
     st.toast("フォーマットが変更されたため、デッキをリセットしました。", icon="🔄")
 
@@ -81,6 +90,7 @@ st.title("MTG Deckbuilder")
 selected_format = st.selectbox(
     "フォーマットを選択",
     ["Standard", "Pioneer", "Modern"],
+    key="format_selector", # プログラムから動かせるようにキーを設定
     on_change=clear_deck_on_format_change
 )
 
@@ -253,11 +263,15 @@ if not deck_df.empty:
         st.session_state.deck = new_deck
         st.rerun()
 
+    # --- (ダッシュボードの表示部分はそのまま) ---
+
     st.subheader("アリーナ用エクスポート")
-    export_text = "\n".join([f"{row['count']} {row['name']}" for _, row in deck_df.iterrows()])
+    # フォーマット情報を先頭に付与（MTGアリーナ互換）
+    export_lines = [f"Format: {selected_format}", "", "Deck"]
+    export_lines.extend([f"{row['count']} {row['name']}" for _, row in deck_df.iterrows()])
+    export_text = "\n".join(export_lines)
     st.code(export_text, language="text")
     
-    # リセットボタンは通常のボタンに変更（更新ボタンを目立たせるため）
     if st.button("🗑️ デッキをすべてリセット", use_container_width=True):
         st.session_state.deck = []
         st.rerun()
@@ -271,16 +285,15 @@ st.divider()
 # ==========================================
 st.header("💾 デッキの保存・読み込み")
 
-# 画面を左右に分割（スマホでは自動的に縦並びになります）
 col_import, col_export = st.columns(2)
 
 with col_export:
     st.subheader("📤 保存 (ダウンロード)")
     if not deck_df.empty:
-        # 現在のデッキをテキスト化
-        save_text = "\n".join([f"{row['count']} {row['name']}" for _, row in deck_df.iterrows()])
+        save_lines = [f"Format: {selected_format}", "", "Deck"]
+        save_lines.extend([f"{row['count']} {row['name']}" for _, row in deck_df.iterrows()])
+        save_text = "\n".join(save_lines)
         
-        # Streamlit標準のダウンロードボタン
         st.download_button(
             label="テキストファイルとして保存",
             data=save_text,
@@ -289,25 +302,45 @@ with col_export:
             type="primary",
             use_container_width=True
         )
-        st.info("作成したデッキをスマホやPCに保存できます。")
+        st.info("MTGアリーナ互換の形式で保存されます。")
     else:
         st.info("デッキが空です。")
 
 with col_import:
-    st.subheader("📥 読み込み (復元)")
-    import_text = st.text_area("保存したテキストを貼り付け", height=150, placeholder="例:\n4 Dark Matter Manipulator\n22 Swamp")
+    st.subheader("📥 読み込み (自動判定)")
+    import_text = st.text_area(
+        "テキストを貼り付け", 
+        height=150, 
+        placeholder="Format: Standard\n\nDeck\n4 Dark Matter Manipulator\n22 Swamp"
+    )
     
     if st.button("テキストからデッキを復元", use_container_width=True):
         if import_text.strip():
             new_deck = []
-            # 改行で分割して1行ずつ処理
+            detected_format = None
             lines = import_text.split('\n')
+            
             for line in lines:
                 line = line.strip()
                 if not line:
                     continue
                 
-                # 最初の半角スペースで分割（枚数とカード名に分ける）
+                # 1. フォーマット指定タグの読み取り
+                if line.lower().startswith("format:"):
+                    fmt_str = line.split(":", 1)[1].strip().lower()
+                    if "standard" in fmt_str:
+                        detected_format = "Standard"
+                    elif "pioneer" in fmt_str:
+                        detected_format = "Pioneer"
+                    elif "modern" in fmt_str:
+                        detected_format = "Modern"
+                    continue
+                    
+                # "Deck" や "Sideboard" などのヘッダーはスキップ
+                if line.lower() in ["deck", "commander", "sideboard"]:
+                    continue
+                
+                # 2. カードの抽出
                 parts = line.split(" ", 1)
                 if len(parts) == 2 and parts[0].isdigit():
                     count = int(parts[0])
@@ -315,8 +348,25 @@ with col_import:
                     new_deck.append({"name": name, "count": count})
             
             if new_deck:
+                # 3. 最強機能：タグが無かった場合の「カードプールからの逆引き判定」
+                if not detected_format:
+                    card_names = [card["name"].lower() for card in new_deck]
+                    for check_fmt in ["Standard", "Pioneer", "Modern"]:
+                        temp_df = load_data(check_fmt)
+                        if not temp_df.empty:
+                            temp_cards = set(temp_df["name"].str.lower().tolist())
+                            # すべてのカードがそのフォーマットに存在するかチェック
+                            if all(name in temp_cards for name in card_names):
+                                detected_format = check_fmt
+                                break
+                                
+                # フォーマットの自動切り替え（現在と違う場合のみ）
+                if detected_format and detected_format != st.session_state.format_selector:
+                    st.session_state.skip_clear = True
+                    st.session_state.format_selector = detected_format
+                    
                 st.session_state.deck = new_deck
-                st.success("デッキを読み込みました！")
+                st.success(f"デッキを読み込みました！ (自動判定: {detected_format or '不明'})")
                 st.rerun()
             else:
-                st.error("読み込めるカードが見つかりませんでした。形式を確認してください。")
+                st.error("読み込めるカードが見つかりませんでした。")
