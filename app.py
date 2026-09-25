@@ -76,7 +76,10 @@ if st.session_state.get("pending_format"):
     st.session_state.skip_clear = True # 自動切り替え時はリセットを防止
 
 def clear_deck_on_format_change():
-    # プログラムからの自動切り替え時はデッキを消さない
+    # ★追加: フォーマット変更時に検索窓を空にする
+    if "search_query" in st.session_state:
+        st.session_state.search_query = ""
+        
     if st.session_state.get("skip_clear"):
         st.session_state.skip_clear = False
         return
@@ -108,10 +111,11 @@ st.header("🔍 カード検索")
 if df.empty:
     st.warning("このフォーマットのカードデータが設定されていません。")
 else:
-    search_query = st.text_input("カード名を入力")
+    # ★ key="search_query" を追加してプログラムから操作可能にする
+    search_input = st.text_input("カード名を入力", key="search_query")
 
-    if search_query:
-        results = df[df["name"].str.contains(search_query, case=False, na=False)]
+    if search_input:
+        results = df[df["name"].str.contains(search_input, case=False, na=False)]
         if not results.empty:
             selected_card = st.selectbox("検索結果", results["name"].tolist())
             selected_row = results[results["name"] == selected_card].iloc[0]
@@ -231,6 +235,9 @@ if not deck_df.empty:
     
     if st.button("🗑️ デッキをすべてリセット", use_container_width=True):
         st.session_state.deck = []
+        # ★追加: リセット時にも検索窓を空にする
+        if "search_query" in st.session_state:
+            st.session_state.search_query = ""
         st.rerun()
 else:
     st.info("上の検索バーからカードを追加してください。")
@@ -300,15 +307,17 @@ with col_import:
                                 detected_format = check_fmt
                                 break
                                 
-                # フォーマットの自動切り替え（現在と違う場合のみ）
-                if detected_format and detected_format != st.session_state.format_selector:
-                    # 次の再描画時の先頭（3番の場所）で強制書き換えさせるための予約フラグ
+                # フォーマットの自動切り替え（現在と違う場合のみ）                                
+                if detected_format and detected_format != st.session_state.current_format:
                     st.session_state.pending_format = detected_format
                     
                 st.session_state.deck = new_deck
                 st.success(f"デッキを読み込みました！ (自動判定: {detected_format or '不明'})")
                 
-                # 強制的に画面を一番上から描き直させる
+                # ★追加: インポート完了時に検索窓を空にする
+                if "search_query" in st.session_state:
+                    st.session_state.search_query = ""
+                    
                 st.rerun()
             else:
                 st.error("読み込めるカードが見つかりませんでした。")
