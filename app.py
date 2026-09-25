@@ -185,6 +185,16 @@ if not deck_df.empty:
     possible_cost_cols = ["mana_cost", "manacost", "mana cost", "マナコスト"]
     cost_col = next((col for col in possible_cost_cols if col in deck_details.columns), None)
 
+    # ★ 追加：マナ総量（CMC）と名前順でソートする処理 ★
+    if cmc_col:
+        # CMCを数値化（数値変換できないエラー値は0扱い）
+        deck_details["sort_cmc"] = pd.to_numeric(deck_details[cmc_col], errors='coerce').fillna(0)
+    else:
+        deck_details["sort_cmc"] = 0
+        
+    # マナ総量（昇順） -> 名前（アルファベット順）の優先順位で並び替え
+    deck_details = deck_details.sort_values(by=["sort_cmc", "name"]).reset_index(drop=True)
+
     # カードタイプの分類（土地・クリーチャー・その他）
     deck_details["category"] = "other"
     if type_col:
@@ -195,7 +205,7 @@ if not deck_df.empty:
     # メインとサイドを分割
     main_df = deck_details[deck_details["board"] == "main"]
     side_df = deck_details[deck_details["board"] == "side"]
-
+    
     # --- 機能③: デッキ適正（バリデーション）チェック ---
     st.subheader("⚖️ デッキ適正チェック")
     main_count = main_df["count"].sum() if not main_df.empty else 0
