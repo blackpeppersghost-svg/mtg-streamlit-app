@@ -57,10 +57,8 @@ def load_data(format_name):
             
     if dfs:
         combined_df = pd.concat(dfs, ignore_index=True)
-        
-        # ★最強の解決策：ここで全列名を強制的に小文字に統一します
+        # ここで全列名を強制的に小文字に統一します（大文字小文字のエラー回避）
         combined_df.columns = combined_df.columns.str.lower()
-        
         return combined_df
     else:
         return pd.DataFrame(columns=["name", "type"]) 
@@ -71,7 +69,6 @@ def load_data(format_name):
 if "deck" not in st.session_state:
     st.session_state.deck = []
 
-# フォーマットが変更されたときにデッキを空にする関数
 def clear_deck_on_format_change():
     st.session_state.deck = []
     st.toast("フォーマットが変更されたため、デッキをリセットしました。", icon="🔄")
@@ -84,10 +81,9 @@ st.title("MTG Deckbuilder")
 selected_format = st.selectbox(
     "フォーマットを選択",
     ["Standard", "Pioneer", "Modern"],
-    on_change=clear_deck_on_format_change # 選択が切り替わった瞬間にリセットを実行
+    on_change=clear_deck_on_format_change
 )
 
-# 選択されたフォーマットのデータを読み込む
 df = load_data(selected_format)
 
 # ==========================================
@@ -101,7 +97,6 @@ else:
     search_query = st.text_input("カード名を入力")
 
     if search_query:
-        # 列名が小文字に統一されたので、常に "name" で安全に検索できます
         results = df[df["name"].str.contains(search_query, case=False, na=False)]
         
         if not results.empty:
@@ -110,7 +105,6 @@ else:
             selected_row = results[results["name"] == selected_card].iloc[0]
             is_basic_land = False
             
-            # Type列の名前揺れ（type または type_line）にも完璧に対応
             type_col_name = "type_line" if "type_line" in df.columns else "type"
             if type_col_name in df.columns:
                 type_val = str(selected_row[type_col_name]).lower()
@@ -140,19 +134,27 @@ st.header("📊 ダッシュボード")
 deck_df = pd.DataFrame(st.session_state.deck)
 
 if not deck_df.empty:
-    # 修正ポイント: right_on を小文字の "name" に変更（CSVの列名に合わせる）
     deck_details = pd.merge(deck_df, df, on="name", how="left")
     deck_details = deck_details.drop_duplicates(subset=["name"])
 
-    # 列名の揺れを小文字ベースで判定
-    type_col = "type_line" if "type_line" in deck_details.columns else "type"
-    cmc_col = "cmc"
+    # 【重要】列名が存在しなかった場合のフォールバック（自動検出）
+    possible_type_cols = ["type_line", "type", "タイプ", "card_type"]
+    type_col = next((col for col in possible_type_cols if col in deck_details.columns), None)
 
-    # 土地かどうかの判定（NaNエラーを回避して小文字変換後に "land" を含むか）
-    deck_details["is_land"] = deck_details[type_col].fillna("").astype(str).str.lower().str.contains("land")
+    possible_cmc_cols = ["cmc", "mana value", "manavalue", "マナ総量", "mana_value"]
+    cmc_col = next((col for col in possible_cmc_cols if col in deck_details.columns), None)
+
+    possible_cost_cols = ["mana_cost", "manacost", "mana cost", "マナコスト"]
+    cost_col = next((col for col in possible_cost_cols if col in deck_details.columns), None)
+
+    # 土地かどうかの判定
+    if type_col:
+        deck_details["is_land"] = deck_details[type_col].fillna("").astype(str).str.lower().str.contains("land")
+    else:
+        deck_details["is_land"] = False
 
     # -----------------------------------
-    # KPI（主要指標）の計算
+    # KPI計算
     # -----------------------------------
     total_cards = deck_details["count"].sum()
     total_lands = deck_details.loc[deck_details["is_land"], "count"].sum()
@@ -160,8 +162,7 @@ if not deck_df.empty:
 
     spells_df = deck_details[~deck_details["is_land"]].copy()
     
-    if total_spells > 0 and cmc_col in spells_df.columns:
-        # CMCを確実に数値化
+    if total_spells > 0 and cmc_col:
         spells_df[cmc_col] = pd.to_numeric(spells_df[cmc_col], errors='coerce').fillna(0)
         avg_cmc = (spells_df[cmc_col] * spells_df["count"]).sum() / total_spells
     else:
@@ -174,14 +175,17 @@ if not deck_df.empty:
     col4.metric("平均マナ総量", f"{avg_cmc:.2f}")
 
     # -----------------------------------
-    # マナカーブ（グラフ）の描画
+    # マナカーブグラフ
     # -----------------------------------
     st.subheader("📈 マナカーブ（土地を除く）")
-    if not spells_df.empty and cmc_col in spells_df.columns:
-        spells_df["マナ総量"] = spells_df[cmc_col].astype(int).astype(str) # 棒グラフのX軸用に文字列化
+    if cmc_col is None:
+        # CMC列がない場合、画面上で原因を教えるアラートを表示
+        st.error("⚠️ ドライブのCSVデータ内にマナ総量（CMC）を示す列が存在しないため、グラフを描画できません。")
+        st.info(f"💡 【デバッグ用】現在読み込んでいるCSVの列名一覧: {', '.join(df.columns)}")
+    elif not spells_df.empty:
+        spells_df["マナ総量"] = spells_df[cmc_col].astype(int).astype(str)
         mana_curve = spells_df.groupby("マナ総量")["count"].sum().reset_index()
         mana_curve = mana_curve.set_index("マナ総量")
-        
         st.bar_chart(mana_curve)
     else:
         st.info("グラフ化できる呪文がありません。")
@@ -191,10 +195,10 @@ if not deck_df.empty:
     # -----------------------------------
     st.subheader("📋 デッキリスト")
     display_cols = ["name", "count"]
-    if type_col in deck_details.columns:
+    if type_col:
         display_cols.append(type_col)
-    if "mana_cost" in deck_details.columns:
-        display_cols.append("mana_cost") # マナコストのテキストも表示に追加
+    if cost_col:
+        display_cols.append(cost_col)
         
     st.dataframe(deck_details[display_cols], use_container_width=True)
     
