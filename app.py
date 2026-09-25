@@ -211,22 +211,54 @@ if not deck_df.empty:
         st.info("グラフ化できる呪文がありません。")
 
     # -----------------------------------
-    # デッキリストとエクスポート
+    # デッキリストとエクスポート（編集可能バージョン）
     # -----------------------------------
-    st.subheader("📋 デッキリスト")
+    st.subheader("📋 デッキリスト（枚数変更・削除）")
+    
+    # 画面に表示する用の列を用意
     display_cols = ["name", "count"]
     if type_col:
         display_cols.append(type_col)
     if cost_col:
         display_cols.append(cost_col)
         
-    st.dataframe(deck_details[display_cols], use_container_width=True)
+    # 削除用のチェックボックス列（初期値は全てFalse）を追加
+    deck_details["delete"] = False
     
+    # ユーザーが編集できるデータグリッド（st.data_editor）を表示
+    # - 編集できるのは「count（枚数）」と「delete（削除）」のみに制限
+    edited_df = st.data_editor(
+        deck_details[["delete", "count", "name"] + ([type_col] if type_col else []) + ([cost_col] if cost_col else [])],
+        column_config={
+            "delete": st.column_config.CheckboxColumn("削除", default=False),
+            "count": st.column_config.NumberColumn("枚数", min_value=1, max_value=99, step=1),
+            "name": st.column_config.TextColumn("name", disabled=True), # 名前は編集不可
+            type_col: st.column_config.TextColumn(type_col, disabled=True) if type_col else None, # タイプは編集不可
+            cost_col: st.column_config.TextColumn(cost_col, disabled=True) if cost_col else None  # コストは編集不可
+        },
+        disabled=["name", type_col, cost_col], # 万が一のための再ロック
+        hide_index=True, # 行番号は不要なので隠す
+        use_container_width=True
+    )
+    
+    # 編集された結果（edited_df）をもとに、st.session_state.deck を更新するボタン
+    if st.button("更新（枚数変更・削除を反映）", type="primary"):
+        new_deck = []
+        for index, row in edited_df.iterrows():
+            # 削除チェックが入っていないカードだけを残す
+            if not row["delete"]:
+                new_deck.append({"name": row["name"], "count": int(row["count"])})
+        
+        # セッションステートを上書きして画面を再描画
+        st.session_state.deck = new_deck
+        st.rerun()
+
     st.subheader("アリーナ用エクスポート")
     export_text = "\n".join([f"{row['count']} {row['name']}" for _, row in deck_df.iterrows()])
     st.code(export_text, language="text")
     
-    if st.button("🗑️ デッキをリセット", type="primary", use_container_width=True):
+    # リセットボタンは通常のボタンに変更（更新ボタンを目立たせるため）
+    if st.button("🗑️ デッキをすべてリセット", use_container_width=True):
         st.session_state.deck = []
         st.rerun()
 else:
