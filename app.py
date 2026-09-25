@@ -349,7 +349,7 @@ with col_export:
     if not deck_df.empty:
         st.download_button(
             label="テキストファイルとして保存",
-            data=export_text, # 組み立て済みのエクスポートテキストを流用
+            data=export_text, 
             file_name="my_deck.txt",
             mime="text/plain",
             type="primary",
@@ -367,32 +367,62 @@ with col_import:
         if import_text.strip():
             new_deck = []
             detected_format = None
-            current_board = "main" # 読み込み時のボード判定用
+            
+            current_board = "main" # 読み込み時の初期ボード
+            empty_line_count = 0   # 連続する空行をカウント
+            has_main_cards = False # メインボードにカードが追加されたか
             
             for line in import_text.split('\n'):
                 line = line.strip()
-                if not line: continue
+                if not line:
+                    # 空行を見つけたらカウントアップして次へ
+                    empty_line_count += 1
+                    continue
+                
+                line_lower = line.lower()
                 
                 # フォーマットタグの検知
-                if line.lower().startswith("format:"):
-                    fmt_str = line.split(":", 1)[1].strip().lower()
+                if line_lower.startswith("format:"):
+                    fmt_str = line_lower.split(":", 1)[1].strip()
                     if "standard" in fmt_str: detected_format = "Standard"
                     elif "pioneer" in fmt_str: detected_format = "Pioneer"
                     elif "modern" in fmt_str: detected_format = "Modern"
+                    empty_line_count = 0
                     continue
                     
-                # ボード切り替えタグの検知
-                if line.lower() in ["deck", "commander"]:
+                # ボード切り替えタグの検知（明示的なヘッダーがある場合）
+                clean_line = line_lower.strip("[]【】/:- ")
+                if clean_line in ["deck", "commander", "maindeck", "デッキ", "メインボード", "メイン", "統率者"] or line_lower.startswith("// main"):
                     current_board = "main"
+                    empty_line_count = 0
                     continue
-                if line.lower() == "sideboard":
+                    
+                if clean_line in ["sideboard", "side", "サイドボード", "サイド"] or line_lower.startswith("// side"):
                     current_board = "side"
+                    empty_line_count = 0
                     continue
                 
+                # カード行の解析
                 parts = line.split(" ", 1)
                 if len(parts) == 2 and parts[0].isdigit():
-                    new_deck.append({"name": parts[1].strip(), "count": int(parts[0]), "board": current_board})
+                    # ★最強の空行判定ロジック★
+                    # すでにメインデッキの読み込みが進んでいる状態で、1行以上の空行を挟んで
+                    # 新たなカードが出現した場合、自動的に「サイドボード」とみなす
+                    if has_main_cards and current_board == "main" and empty_line_count >= 1:
+                        current_board = "side"
+                        
+                    raw_name = parts[1].strip()
+                    card_name = raw_name.split(" (")[0] if " (" in raw_name else raw_name
+                    
+                    new_deck.append({"name": card_name, "count": int(parts[0]), "board": current_board})
+                    
+                    if current_board == "main":
+                        has_main_cards = True
+                        
+                # 何かしらの文字（カード名や謎のコメント）を処理したら空行カウントをリセット
+                empty_line_count = 0
             
+            # --- 以下は既存の復元処理と同じ ---
             if new_deck:
                 if not detected_format:
                     card_names = [card["name"].lower() for card in new_deck]
