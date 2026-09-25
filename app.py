@@ -127,20 +127,76 @@ st.divider()
 # ==========================================
 # 6. デッキダッシュボードエリア
 # ==========================================
-st.header("📊 現在のデッキ")
+st.header("📊 ダッシュボード")
 deck_df = pd.DataFrame(st.session_state.deck)
 
 if not deck_df.empty:
-    total_cards = deck_df["count"].sum()
-    st.metric("Total Cards", total_cards)
+    # デッキのデータ（名前・枚数）と、CSVの全データ（マナコスト・タイプ等）を結合
+    deck_details = pd.merge(deck_df, df, left_on="name", right_on="Name", how="left")
+    # 万が一、同名カードの別バージョンが重複ヒットした場合は最初の1件だけ残す
+    deck_details = deck_details.drop_duplicates(subset=["name"])
+
+    # 列名の揺れ（CSV側の仕様）に対応
+    type_col = "Type" if "Type" in deck_details.columns else "type_line"
+    cmc_col = "CMC" if "CMC" in deck_details.columns else "cmc"
+
+    # 土地かどうかの判定（大文字小文字を区別せず "land" を含むか）
+    deck_details["is_land"] = deck_details[type_col].fillna("").str.lower().str.contains("land")
+
+    # -----------------------------------
+    # KPI（主要指標）の計算
+    # -----------------------------------
+    total_cards = deck_details["count"].sum()
+    total_lands = deck_details.loc[deck_details["is_land"], "count"].sum()
+    total_spells = total_cards - total_lands
+
+    # 平均マナ総量（土地を除外して計算）
+    spells_df = deck_details[~deck_details["is_land"]].copy()
+    if total_spells > 0 and cmc_col in spells_df.columns:
+        # CMCを数値化して平均を計算
+        spells_df[cmc_col] = pd.to_numeric(spells_df[cmc_col], errors='coerce').fillna(0)
+        avg_cmc = (spells_df[cmc_col] * spells_df["count"]).sum() / total_spells
+    else:
+        avg_cmc = 0.0
+
+    # KPIの表示（PCでは横並び4つ、スマホでは自動で折り返し）
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("総枚数", int(total_cards))
+    col2.metric("土地", int(total_lands))
+    col3.metric("呪文", int(total_spells))
+    col4.metric("平均マナ総量", f"{avg_cmc:.2f}")
+
+    # -----------------------------------
+    # マナカーブ（グラフ）の描画
+    # -----------------------------------
+    st.subheader("📈 マナカーブ（土地を除く）")
+    if not spells_df.empty and cmc_col in spells_df.columns:
+        # マナ総量ごとに枚数を集計してグラフ化
+        spells_df["マナ総量"] = spells_df[cmc_col].astype(int)
+        mana_curve = spells_df.groupby("マナ総量")["count"].sum().reset_index()
+        mana_curve = mana_curve.set_index("マナ総量")
+        
+        # Streamlit標準の棒グラフ（スマホ対応のレスポンシブ仕様）
+        st.bar_chart(mana_curve)
+    else:
+        st.info("グラフ化できる呪文がありません。")
+
+    # -----------------------------------
+    # デッキリストとエクスポート
+    # -----------------------------------
+    st.subheader("📋 デッキリスト")
     
-    st.dataframe(deck_df, use_container_width=True)
+    # 画面に表示する用のスッキリした表（名前、枚数、タイプだけ抽出）
+    display_cols = ["name", "count"]
+    if type_col in deck_details.columns:
+        display_cols.append(type_col)
+    st.dataframe(deck_details[display_cols], use_container_width=True)
     
-    st.subheader("デッキのエクスポート")
+    st.subheader("アリーナ用エクスポート")
     export_text = "\n".join([f"{row['count']} {row['name']}" for _, row in deck_df.iterrows()])
     st.code(export_text, language="text")
     
-    if st.button("デッキをリセット"):
+    if st.button("🗑️ デッキをリセット", type="primary", use_container_width=True):
         st.session_state.deck = []
         st.rerun()
 else:
