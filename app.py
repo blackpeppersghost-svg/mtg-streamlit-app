@@ -179,14 +179,34 @@ if not deck_df.empty:
     # -----------------------------------
     st.subheader("📈 マナカーブ（土地を除く）")
     if cmc_col is None:
-        # CMC列がない場合、画面上で原因を教えるアラートを表示
         st.error("⚠️ ドライブのCSVデータ内にマナ総量（CMC）を示す列が存在しないため、グラフを描画できません。")
         st.info(f"💡 【デバッグ用】現在読み込んでいるCSVの列名一覧: {', '.join(df.columns)}")
     elif not spells_df.empty:
-        spells_df["マナ総量"] = spells_df[cmc_col].astype(int).astype(str)
-        mana_curve = spells_df.groupby("マナ総量")["count"].sum().reset_index()
-        mana_curve = mana_curve.set_index("マナ総量")
-        st.bar_chart(mana_curve)
+        # CMCを整数に変換
+        spells_df["numeric_cmc"] = spells_df[cmc_col].astype(int)
+        
+        # 7以上のコストはすべて「7」として扱う
+        spells_df["マナ総量"] = spells_df["numeric_cmc"].apply(lambda x: min(x, 7))
+        
+        # マナ総量ごとの枚数を集計
+        curve_data = spells_df.groupby("マナ総量")["count"].sum().to_dict()
+        
+        # 「0」から「7+」までの固定の枠（ビン）を作成
+        fixed_bins = ["0", "1", "2", "3", "4", "5", "6", "7+"]
+        fixed_counts = []
+        
+        for i in range(8):
+            # curve_dataに該当のマナ域があればその枚数を、なければ0を追加
+            fixed_counts.append(curve_data.get(i, 0))
+            
+        # グラフ描画用の新しいデータフレームを作成
+        mana_curve_df = pd.DataFrame({
+            "マナ総量": fixed_bins,
+            "count": fixed_counts
+        }).set_index("マナ総量")
+        
+        # st.bar_chartで描画
+        st.bar_chart(mana_curve_df)
     else:
         st.info("グラフ化できる呪文がありません。")
 
