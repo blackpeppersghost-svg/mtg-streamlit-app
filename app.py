@@ -3,6 +3,41 @@ import pandas as pd
 
 st.set_page_config(page_title="MTG Deckbuilder", layout="centered")
 
+# --- ★追加: ゲーミングダークテーマ用カスタムCSS ---
+st.markdown("""
+<style>
+/* メインボタン（primary）にネオン風のグロウ（発光）エフェクトを追加 */
+/* rgbaのRGB値は、config.tomlのprimaryColorに合わせて変更すると綺麗です */
+button[kind="primary"] {
+    box-shadow: 0 0 10px rgba(123, 97, 255, 0.4);
+    transition: all 0.3s ease;
+}
+button[kind="primary"]:hover {
+    box-shadow: 0 0 20px rgba(123, 97, 255, 0.8);
+    transform: translateY(-2px); /* ホバー時に少し浮き上がる */
+}
+
+/* 指標（KPI）の数字を少し大きく・太くして強調 */
+[data-testid="stMetricValue"] {
+    font-weight: 800;
+    font-size: 2.2rem !important;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+}
+
+/* エキスパンダー（詳細確認の折りたたみ枠）のデザイン調整 */
+[data-testid="stExpander"] {
+    border-color: #333333;
+    background-color: #18181E;
+}
+
+/* テキスト入力欄やセレクトボックスの枠線を少しシャープに */
+.stTextInput input, .stSelectbox div[data-baseweb="select"] {
+    border-radius: 4px;
+}
+</style>
+""", unsafe_allow_html=True)
+# ---------------------------------------------------
+
 # ==========================================
 # 1. ファイルIDの管理辞書
 # ==========================================
