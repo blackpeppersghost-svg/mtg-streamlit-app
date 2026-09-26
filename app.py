@@ -3,36 +3,37 @@ import pandas as pd
 
 st.set_page_config(page_title="MTG Deckbuilder", layout="centered")
 
-# --- ★追加: ゲーミングダークテーマ用カスタムCSS ---
+# --- ★修正: クリーンなライトテーマ用カスタムCSS ---
 st.markdown("""
 <style>
-/* メインボタン（primary）にネオン風のグロウ（発光）エフェクトを追加 */
-/* rgbaのRGB値は、config.tomlのprimaryColorに合わせて変更すると綺麗です */
+/* メインボタンに上品な影をつけ、ホバー時に少し浮かせる */
 button[kind="primary"] {
-    box-shadow: 0 0 10px rgba(123, 97, 255, 0.4);
-    transition: all 0.3s ease;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease-in-out;
 }
 button[kind="primary"]:hover {
-    box-shadow: 0 0 20px rgba(123, 97, 255, 0.8);
-    transform: translateY(-2px); /* ホバー時に少し浮き上がる */
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px);
 }
 
-/* 指標（KPI）の数字を少し大きく・太くして強調 */
+/* 指標（KPI）の数字をすっきり太字で強調（影は外してクリアに） */
 [data-testid="stMetricValue"] {
-    font-weight: 800;
+    font-weight: 700;
     font-size: 2.2rem !important;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+    color: #111111;
 }
 
-/* エキスパンダー（詳細確認の折りたたみ枠）のデザイン調整 */
+/* エキスパンダー（詳細確認の折りたたみ枠）の枠線を淡いグレーに */
 [data-testid="stExpander"] {
-    border-color: #333333;
-    background-color: #18181E;
+    border-color: #E6E9EF;
+    background-color: #FFFFFF;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
-/* テキスト入力欄やセレクトボックスの枠線を少しシャープに */
-.stTextInput input, .stSelectbox div[data-baseweb="select"] {
-    border-radius: 4px;
+/* グラフの背景を透明にして白背景に馴染ませる */
+[data-testid="stVegaLiteChart"] {
+    background-color: transparent;
 }
 </style>
 """, unsafe_allow_html=True)
