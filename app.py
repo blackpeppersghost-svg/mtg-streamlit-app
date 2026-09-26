@@ -59,6 +59,60 @@ def load_data(format_name):
         return pd.DataFrame(columns=["name", "type"]) 
 
 # ==========================================
+# カード詳細プレビューの共通表示関数
+# ==========================================
+def render_card_details(card_row):
+    # 各列の取得（存在確認付き）
+    cost_val = card_row.get("mana_cost") or card_row.get("manacost")
+    type_val = card_row.get("type_line") or card_row.get("type")
+    cmc_val = card_row.get("cmc")
+    text_val = card_row.get("oracle_text") or card_row.get("text")
+    power_val = card_row.get("power")
+    toughness_val = card_row.get("toughness")
+    loyalty_val = card_row.get("loyalty")
+    image_url = card_row.get("image_uris_normal") or card_row.get("image_url") or card_row.get("image")
+
+    # 画像がある場合は2カラム構成
+    if pd.notna(image_url) and str(image_url).strip():
+        col_img, col_info = st.columns([1, 2])
+        with col_img:
+            st.image(str(image_url), use_container_width=True)
+        container = col_info
+    else:
+        container = st.container()
+
+    with container:
+        # 基本情報（マナコスト・マナ総量・タイプ）
+        meta_items = []
+        if pd.notna(cost_val) and str(cost_val).strip():
+            meta_items.append(f"**マナコスト:** `{cost_val}`")
+        if pd.notna(cmc_val) and str(cmc_val).strip():
+            try:
+                cmc_display = int(float(cmc_val))
+            except ValueError:
+                cmc_display = cmc_val
+            meta_items.append(f"**マナ総量:** {cmc_display}")
+        if pd.notna(type_val) and str(type_val).strip():
+            meta_items.append(f"**タイプ:** {type_val}")
+
+        if meta_items:
+            st.markdown("  \n".join(meta_items))
+
+        # 戦闘ステータス（P/T または 忠誠度）
+        combat_items = []
+        if pd.notna(power_val) and pd.notna(toughness_val):
+            combat_items.append(f"**P/T:** {power_val}/{toughness_val}")
+        if pd.notna(loyalty_val) and str(loyalty_val).strip():
+            combat_items.append(f"**初期忠誠度:** {loyalty_val}")
+
+        if combat_items:
+            st.markdown("  \n".join(combat_items))
+
+        # 効果テキスト
+        if pd.notna(text_val) and str(text_val).strip():
+            st.info(str(text_val))
+
+# ==========================================
 # 3. アプリケーションの状態管理
 # ==========================================
 if "deck" not in st.session_state:
@@ -131,13 +185,10 @@ else:
             possible_image_cols = ["image_uris_normal", "image_url", "image", "画像", "image_uri"]
             image_col = next((col for col in possible_image_cols if col in df.columns), None)
 
-            with st.expander(f"📖 {selected_card} の効果を確認", expanded=False):
-                if image_col and pd.notna(selected_row[image_col]):
-                    st.image(selected_row[image_col], width=250)
-                if text_col and pd.notna(selected_row[text_col]):
-                    st.write(selected_row[text_col])
-                if not image_col and not text_col:
-                    st.info("⚠️ CSVデータ内に効果テキストや画像URLが含まれていません。")
+            # --- カード詳細プレビュー ---
+            with st.expander(f"📖 {selected_card} の詳細・効果を確認", expanded=False):
+                render_card_details(selected_row)
+            # ---------------------------
             # ------------------------------------
             
             is_basic_land = False
@@ -270,29 +321,14 @@ if not deck_df.empty:
     # --- 機能②: デッキリストの「タイプ別」分割表示と編集 ---
     st.subheader("📋 デッキリスト（枚数変更・削除）")
     
-    # --- ★追加・修正: デッキ内カードの詳細プレビュー機能 ---
+    # --- デッキ内カードの詳細プレビュー ---
     deck_card_names = deck_details["name"].unique().tolist()
     if deck_card_names:
-        with st.expander("🔍 デッキ内のカード効果を確認"):
+        with st.expander("🔍 デッキ内のカード詳細・効果を確認"):
             preview_card = st.selectbox("確認したいカードを選択", deck_card_names, key="preview_deck_card")
             preview_row = deck_details[deck_details["name"] == preview_card].iloc[0]
-            
-            # ★修正: ここで再度、テキスト列と画像列の有無をチェックする（エラー回避）
-            possible_text_cols = ["oracle_text", "text", "テキスト", "効果"]
-            text_col = next((col for col in possible_text_cols if col in deck_details.columns), None)
-            possible_image_cols = ["image_uris_normal", "image_url", "image", "画像", "image_uri"]
-            image_col = next((col for col in possible_image_cols if col in deck_details.columns), None)
-            
-            col_img, col_txt = st.columns([1, 2])
-            with col_img:
-                if image_col and pd.notna(preview_row[image_col]):
-                    st.image(preview_row[image_col], use_container_width=True)
-            with col_txt:
-                if text_col and pd.notna(preview_row[text_col]):
-                    st.write(preview_row[text_col])
-                if not image_col and not text_col:
-                    st.info("データにテキストや画像がありません。")
-    # ----------------------------------------------
+            render_card_details(preview_row)
+    # ------------------------------------
     
     # 編集用グリッドを描画する共通関数
     def draw_editor(df_subset):
