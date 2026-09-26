@@ -270,12 +270,18 @@ if not deck_df.empty:
     # --- 機能②: デッキリストの「タイプ別」分割表示と編集 ---
     st.subheader("📋 デッキリスト（枚数変更・削除）")
     
-    # --- ★追加: デッキ内カードの詳細プレビュー機能 ---
+    # --- ★追加・修正: デッキ内カードの詳細プレビュー機能 ---
     deck_card_names = deck_details["name"].unique().tolist()
     if deck_card_names:
         with st.expander("🔍 デッキ内のカード効果を確認"):
             preview_card = st.selectbox("確認したいカードを選択", deck_card_names, key="preview_deck_card")
             preview_row = deck_details[deck_details["name"] == preview_card].iloc[0]
+            
+            # ★修正: ここで再度、テキスト列と画像列の有無をチェックする（エラー回避）
+            possible_text_cols = ["oracle_text", "text", "テキスト", "効果"]
+            text_col = next((col for col in possible_text_cols if col in deck_details.columns), None)
+            possible_image_cols = ["image_uris_normal", "image_url", "image", "画像", "image_uri"]
+            image_col = next((col for col in possible_image_cols if col in deck_details.columns), None)
             
             col_img, col_txt = st.columns([1, 2])
             with col_img:
