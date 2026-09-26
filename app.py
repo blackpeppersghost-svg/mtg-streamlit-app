@@ -110,7 +110,7 @@ selected_format = st.selectbox(
 df = load_data(selected_format)
 
 # ==========================================
-# 5. 検索・追加エリア（サイドボード対応）
+# 5. 検索・追加エリア（効果プレビュー対応）
 # ==========================================
 st.header("🔍 カード検索")
 
@@ -125,6 +125,21 @@ else:
             selected_card = st.selectbox("検索結果", results["name"].tolist())
             selected_row = results[results["name"] == selected_card].iloc[0]
             
+            # --- ★追加: カード詳細プレビュー機能 ---
+            possible_text_cols = ["oracle_text", "text", "テキスト", "効果"]
+            text_col = next((col for col in possible_text_cols if col in df.columns), None)
+            possible_image_cols = ["image_uris_normal", "image_url", "image", "画像", "image_uri"]
+            image_col = next((col for col in possible_image_cols if col in df.columns), None)
+
+            with st.expander(f"📖 {selected_card} の効果を確認", expanded=False):
+                if image_col and pd.notna(selected_row[image_col]):
+                    st.image(selected_row[image_col], width=250)
+                if text_col and pd.notna(selected_row[text_col]):
+                    st.write(selected_row[text_col])
+                if not image_col and not text_col:
+                    st.info("⚠️ CSVデータ内に効果テキストや画像URLが含まれていません。")
+            # ------------------------------------
+            
             is_basic_land = False
             type_col_name = "type_line" if "type_line" in df.columns else "type"
             if type_col_name in df.columns:
@@ -134,7 +149,6 @@ else:
                 
             max_copies = 99 if is_basic_land else 4
             
-            # メインとサイドのボタンを並べる
             col1, col2, col3 = st.columns([2, 1, 1])
             with col1:
                 add_count = st.number_input("枚数", min_value=1, max_value=max_copies, value=1)
@@ -255,6 +269,24 @@ if not deck_df.empty:
 
     # --- 機能②: デッキリストの「タイプ別」分割表示と編集 ---
     st.subheader("📋 デッキリスト（枚数変更・削除）")
+    
+    # --- ★追加: デッキ内カードの詳細プレビュー機能 ---
+    deck_card_names = deck_details["name"].unique().tolist()
+    if deck_card_names:
+        with st.expander("🔍 デッキ内のカード効果を確認"):
+            preview_card = st.selectbox("確認したいカードを選択", deck_card_names, key="preview_deck_card")
+            preview_row = deck_details[deck_details["name"] == preview_card].iloc[0]
+            
+            col_img, col_txt = st.columns([1, 2])
+            with col_img:
+                if image_col and pd.notna(preview_row[image_col]):
+                    st.image(preview_row[image_col], use_container_width=True)
+            with col_txt:
+                if text_col and pd.notna(preview_row[text_col]):
+                    st.write(preview_row[text_col])
+                if not image_col and not text_col:
+                    st.info("データにテキストや画像がありません。")
+    # ----------------------------------------------
     
     # 編集用グリッドを描画する共通関数
     def draw_editor(df_subset):
