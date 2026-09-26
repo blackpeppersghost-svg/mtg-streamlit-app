@@ -62,18 +62,25 @@ def load_data(format_name):
 # カード詳細プレビューの共通表示関数
 # ==========================================
 def render_card_details(card_row):
-    # 各列の取得（存在確認付き）
-    cost_val = card_row.get("mana_cost") or card_row.get("manacost")
-    type_val = card_row.get("type_line") or card_row.get("type")
-    cmc_val = card_row.get("cmc")
-    text_val = card_row.get("oracle_text") or card_row.get("text")
-    power_val = card_row.get("power")
-    toughness_val = card_row.get("toughness")
-    loyalty_val = card_row.get("loyalty")
-    image_url = card_row.get("image_uris_normal") or card_row.get("image_url") or card_row.get("image")
+    # 列名の揺れに対応して安全に値を取得する内部関数
+    def get_val(possible_cols):
+        for col in possible_cols:
+            if col in card_row.index and pd.notna(card_row[col]) and str(card_row[col]).strip():
+                return card_row[col]
+        return None
+
+    # 各種データを柔軟に取得
+    image_url = get_val(["image_uris_normal", "image_url", "image", "画像", "image_uri"])
+    cost_val = get_val(["mana_cost", "manacost", "mana cost", "マナコスト"])
+    cmc_val = get_val(["cmc", "mana value", "manavalue", "マナ総量", "mana_value"])
+    type_val = get_val(["type_line", "type", "タイプ", "card_type"])
+    text_val = get_val(["oracle_text", "text", "テキスト", "効果"])
+    power_val = get_val(["power", "p", "パワー"])
+    toughness_val = get_val(["toughness", "t", "タフネス"])
+    loyalty_val = get_val(["loyalty", "忠誠度"])
 
     # 画像がある場合は2カラム構成
-    if pd.notna(image_url) and str(image_url).strip():
+    if image_url:
         col_img, col_info = st.columns([1, 2])
         with col_img:
             st.image(str(image_url), use_container_width=True)
@@ -84,15 +91,15 @@ def render_card_details(card_row):
     with container:
         # 基本情報（マナコスト・マナ総量・タイプ）
         meta_items = []
-        if pd.notna(cost_val) and str(cost_val).strip():
+        if cost_val:
             meta_items.append(f"**マナコスト:** `{cost_val}`")
-        if pd.notna(cmc_val) and str(cmc_val).strip():
+        if cmc_val:
             try:
                 cmc_display = int(float(cmc_val))
             except ValueError:
                 cmc_display = cmc_val
             meta_items.append(f"**マナ総量:** {cmc_display}")
-        if pd.notna(type_val) and str(type_val).strip():
+        if type_val:
             meta_items.append(f"**タイプ:** {type_val}")
 
         if meta_items:
@@ -100,16 +107,20 @@ def render_card_details(card_row):
 
         # 戦闘ステータス（P/T または 忠誠度）
         combat_items = []
-        if pd.notna(power_val) and pd.notna(toughness_val):
+        if power_val and toughness_val:
             combat_items.append(f"**P/T:** {power_val}/{toughness_val}")
-        if pd.notna(loyalty_val) and str(loyalty_val).strip():
+        elif get_val(["pt", "p/t"]):
+            # "3/3" のように1列にまとまっている場合への備え
+            combat_items.append(f"**P/T:** {get_val(['pt', 'p/t'])}")
+            
+        if loyalty_val:
             combat_items.append(f"**初期忠誠度:** {loyalty_val}")
 
         if combat_items:
             st.markdown("  \n".join(combat_items))
 
         # 効果テキスト
-        if pd.notna(text_val) and str(text_val).strip():
+        if text_val:
             st.info(str(text_val))
 
 # ==========================================
